@@ -1,0 +1,30 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      FRONTEND_DIST_DIR: /app/frontend_dist
+      LOG_DIR: /app/logs
+      AUTO_SEED_EXTERNAL_INDEXES: "false"
+      QDRANT_URL: ${SINGLE_QDRANT_URL:-http://host.docker.internal:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      NEO4J_URI: ${SINGLE_NEO4J_URI:-bolt://host.docker.internal:7687}
+      REDIS_URL: ${SINGLE_REDIS_URL:-redis://host.docker.internal:6379/0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_PORT:-8080}:8000"
+    volumes:
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  app_logs:
