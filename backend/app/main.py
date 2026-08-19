@@ -12,6 +12,8 @@ from backend.app.core.rate_limit import rate_limit_request
 from backend.app.core.security_headers import security_headers_request
 from backend.app.routers import admin, auth, bulk, candidate, companies, interviews, jobs, matching, resumes
 from backend.app.services.bootstrap import ensure_default_admin
+from backend.app.services.verification_codes import ensure_company_verification_codes
+from backend.app.database.connection import SessionLocal
 
 
 setup_logging()
@@ -21,6 +23,10 @@ system_logger = service_logger("system")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ensure_default_admin()
+    with SessionLocal() as db:
+        generated_codes = ensure_company_verification_codes(db)
+    if generated_codes:
+        system_logger.info("company_verification_codes_generated", extra={"count": generated_codes})
     system_logger.info("application_started", extra={"app_name": settings.app_name})
     yield
     system_logger.info("application_stopped", extra={"app_name": settings.app_name})

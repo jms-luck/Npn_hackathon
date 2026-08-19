@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 import re
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from backend.app.core.config import settings
 from backend.app.services.cache import cache_get, cache_set
 from backend.app.services.public_ids import format_public_id, parse_public_id
 from backend.app.services.audit_reader import read_audit_events
+from backend.app.services.verification_codes import generate_company_verification_code
 
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_role("ADMIN"))])
@@ -23,6 +24,11 @@ class CompanyWrite(BaseModel):
     company_size: str | None = None
     company_profile: str | None = None
     verification_code: str | None = None
+
+    @field_validator("verification_code", mode="before")
+    @classmethod
+    def normalize_verification_code(cls, value):
+        return str(value).strip() if value is not None and str(value).strip() else None
 
 
 class UserUpdate(BaseModel):
@@ -135,7 +141,9 @@ def companies(q: str | None = None, sort_by: str = "company_name", order: str = 
 
 @router.post("/companies", status_code=201)
 def create_company(payload: CompanyWrite, db: Session = Depends(get_db)) -> dict:
-    item = Company(**payload.model_dump())
+    values = payload.model_dump()
+    values["verification_code"] = values["verification_code"] or generate_company_verification_code()
+    item = Company(**values)
     db.add(item); commit_or_conflict(db, "A company with this name already exists"); db.refresh(item)
     return company_item(item)
 
@@ -144,7 +152,9 @@ def create_company(payload: CompanyWrite, db: Session = Depends(get_db)) -> dict
 def update_company(company_ID: str, payload: CompanyWrite, db: Session = Depends(get_db)) -> dict:
     item = db.get(Company, db_id(company_ID, "company"))
     if not item: raise HTTPException(404, "Company not found")
-    for key, value in payload.model_dump().items(): setattr(item, key, value)
+    values = payload.model_dump()
+    values["verification_code"] = values["verification_code"] or generate_company_verification_code()
+    for key, value in values.items(): setattr(item, key, value)
     commit_or_conflict(db, "A company with this name already exists"); db.refresh(item)
     return company_item(item)
 

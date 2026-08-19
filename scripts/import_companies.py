@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
+from backend.app.services.verification_codes import generate_company_verification_code
+
 
 def clean(value):
     return None if pd.isna(value) or str(value).strip() == "" else str(value).strip()
@@ -47,15 +49,16 @@ def main() -> None:
                 continue
             frame.columns = [column.strip().lower() for column in frame.columns]
             normalized = [company_values(row.company, row.company_size, row.company_profile) for row in frame.itertuples()]
-            rows = {name: (name, size, profile) for name, size, profile in normalized if name}
+            rows = {name: (name, size, profile, generate_company_verification_code()) for name, size, profile in normalized if name}
             with connection.cursor() as cursor:
                 execute_values(
                     cursor,
-                    """INSERT INTO companies (company_name, company_size, company_profile)
+                          """INSERT INTO companies (company_name, company_size, company_profile, verification_code)
                        VALUES %s
                        ON CONFLICT (company_name) DO UPDATE SET
                            company_size = COALESCE(EXCLUDED.company_size, companies.company_size),
-                           company_profile = COALESCE(EXCLUDED.company_profile, companies.company_profile)""",
+                              company_profile = COALESCE(EXCLUDED.company_profile, companies.company_profile),
+                              verification_code = COALESCE(NULLIF(BTRIM(companies.verification_code), ''), EXCLUDED.verification_code)""",
                     list(rows.values()),
                 )
             connection.commit()
