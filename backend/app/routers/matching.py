@@ -47,7 +47,7 @@ def github_explanation(evidence: dict) -> str:
 
 
 @router.post("/candidate/match")
-def candidate_match(resume_id: int, limit: int = Query(20, le=50), candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[dict]:
+def candidate_match(resume_id: int, limit: int = Query(50, ge=1, le=100), candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[dict]:
     resume = db.get(Resume, resume_id)
     if not resume or resume.candidate_id != candidate.candidate_id or not resume.extracted_text:
         raise HTTPException(status_code=404, detail="Parsed resume not found")
@@ -71,7 +71,7 @@ def candidate_match(resume_id: int, limit: int = Query(20, le=50), candidate: Ca
 
 
 @router.get("/candidate/recommended-jobs")
-def recommended_jobs(resume_id: int, limit: int = Query(20, ge=1, le=50), candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[dict]:
+def recommended_jobs(resume_id: int, limit: int = Query(50, ge=1, le=100), candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[dict]:
     return candidate_match(resume_id, limit, candidate, db)
 
 

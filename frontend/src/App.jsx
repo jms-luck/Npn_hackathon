@@ -54,7 +54,7 @@ function Register({ initialType = "candidate" }) {
 
   useEffect(() => {
     if (!["recruiter", "interviewer"].includes(accountType)) return;
-    api("/companies?limit=1000").then(setCompanies).catch(err => setError(err.message));
+    api("/companies/options").then(setCompanies).catch(err => setError(err.message));
   }, [accountType]);
 
   async function submit(event) {
@@ -143,10 +143,10 @@ function Jobs({ recruiter = false }) {
 
 function RecommendedJobs() {
   const [resumes, setResumes] = useState([]); const [resumeId, setResumeId] = useState(""); const [jobs, setJobs] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
-  async function loadMatches(selectedResumeId) { setLoading(true); setError(""); try { setJobs(await api(`/candidate/recommended-jobs?resume_id=${selectedResumeId}&limit=20`)); } catch (requestError) { setError(requestError.message); setJobs([]); } finally { setLoading(false); } }
-  useEffect(() => { api("/candidate/resumes").then(items => { setResumes(items); if (items.length) { const selected = String(items[0].resume_id); setResumeId(selected); return api(`/candidate/recommended-jobs?resume_id=${selected}&limit=20`).then(setJobs); } return null; }).catch(requestError => setError(requestError.message)).finally(() => setLoading(false)); }, []);
+  async function loadMatches(selectedResumeId) { setLoading(true); setError(""); try { setJobs(await api(`/candidate/recommended-jobs?resume_id=${selectedResumeId}&limit=50`)); } catch (requestError) { setError(requestError.message); setJobs([]); } finally { setLoading(false); } }
+  useEffect(() => { api("/candidate/resumes").then(items => { setResumes(items); if (items.length) { const selected = String(items[0].resume_id); setResumeId(selected); return api(`/candidate/recommended-jobs?resume_id=${selected}&limit=50`).then(setJobs); } return null; }).catch(requestError => setError(requestError.message)).finally(() => setLoading(false)); }, []);
   return <Page eyebrow="Resume-to-role vector search" title="Your job matches" action={resumes.length > 0 && <button className="primary" onClick={() => loadMatches(resumeId)} disabled={loading}><Sparkles /> Refresh matches</button>}>
-    {resumes.length > 0 && <div className="match-resume-picker"><label>Resume used for matching<select value={resumeId} onChange={event => { setResumeId(event.target.value); loadMatches(event.target.value); }}>{resumes.map(resume => <option key={resume.resume_id} value={resume.resume_id}>v{resume.version} · {resume.original_filename}</option>)}</select></label><p>Azure OpenAI embeds the selected resume and Qdrant ranks active job-description vectors by cosine similarity.</p></div>}
+    {resumes.length > 0 && <div className="match-resume-picker"><label>Resume used for matching<select value={resumeId} onChange={event => { setResumeId(event.target.value); loadMatches(event.target.value); }}>{resumes.map(resume => <option key={resume.resume_id} value={resume.resume_id}>v{resume.version} · {resume.original_filename}</option>)}</select></label><p>Qdrant compares the resume vector against the entire indexed active-job collection and returns the top 50 by cosine similarity.</p></div>}
     {loading && <p className="notice">Searching the vector index for suitable roles...</p>}{error && <p className="error">{error}</p>}
     {!loading && !resumes.length && <Empty title="Upload a resume first" text="A parsed PDF or DOCX resume is required for job matching." />}
     <div className="list job-list">{jobs.map((job, index) => <NavLink className="job-row job-card recommendation-row" key={job.job_id} to={`/candidate/jobs/${job.job_id}`}><div><span className="pill">#{index + 1} · {job.Job_Id || formatJobId(job.job_id)}</span><h3>{job.job_title}</h3><p className="job-company">{job.company_name || "Company not specified"}</p><div className="job-facts"><span><small>Location</small>{job.location || "Flexible"}</span><span><small>Role</small>{job.role || "Open"}</span><span><small>Experience</small>{job.experience || "Not specified"}</span><span><small>Work type</small>{job.work_type || "Not specified"}</span></div></div><div className="candidate-match-score"><strong>{job.semantic_score.toFixed(1)}%</strong><small>RESUME MATCH</small></div></NavLink>)}</div>

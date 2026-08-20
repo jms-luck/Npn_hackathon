@@ -63,6 +63,7 @@ def test_required_routes_are_registered() -> None:
         "/api/auth/login",
         "/api/auth/profile",
         "/api/jobs",
+        "/api/companies/options",
         "/api/resumes/upload",
         "/api/candidate/match",
         "/api/candidate/recommended-jobs",

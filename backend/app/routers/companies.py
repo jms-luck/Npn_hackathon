@@ -12,6 +12,17 @@ from backend.app.services.cache import cache_get, cache_set
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
+@router.get("/options")
+def company_options(db: Session = Depends(get_db)) -> list[dict]:
+    key = "companies:options"
+    if cached := cache_get(key):
+        return cached
+    rows = db.execute(select(Company.company_id, Company.company_name).order_by(Company.company_name)).all()
+    payload = [{"company_id": company_id, "company_name": company_name} for company_id, company_name in rows]
+    cache_set(key, payload, settings.cache_company_ttl)
+    return payload
+
+
 @router.get("", response_model=list[CompanyResponse])
 def list_companies(limit: int = Query(100, le=1000), offset: int = 0, db: Session = Depends(get_db)) -> list[Company]:
     key = f"companies:list:{limit}:{offset}"
