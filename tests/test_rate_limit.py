@@ -6,6 +6,7 @@ def test_sensitive_routes_have_bounded_rate_rules() -> None:
     assert rate_rule("POST", "/api/resumes/upload").window_seconds == 3_600
     assert rate_rule("POST", "/api/recruiter/jobs/7/match").name == "matching"
     assert rate_rule("GET", "/api/candidate/recommended-jobs").limit == 20
+    assert rate_rule("POST", "/api/candidate/github-evaluation").name == "external_profile"
     assert rate_rule("GET", "/api/jobs") is None
 
 

@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from backend.app.services.cache import cache_get, cache_set
 from backend.app.core.config import settings
 from backend.app.services.graph import sync_application_entities
 from backend.app.services.leetcode import LeetCodeError, fetch_leetcode_profile, normalize_leetcode_username, score_dsa_profile
+from backend.app.services.github_profiles import GitHubProfileError, evaluate_github_resume_evidence
 
 
 router = APIRouter(tags=["candidate"])
@@ -23,6 +24,20 @@ logger = logging.getLogger("hireai.candidate")
 @router.get("/candidate/profile")
 def candidate_profile(candidate: Candidate = Depends(get_candidate)) -> dict:
     return {"candidate_id": candidate.candidate_id, "phone": candidate.phone, "location": candidate.location, "profile_summary": candidate.profile_summary}
+
+
+@router.post("/candidate/github-evaluation")
+def evaluate_candidate_github(candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> dict:
+    if not candidate.github_url:
+        raise HTTPException(status_code=400, detail="Add a GitHub profile URL before verification")
+    resume = db.scalar(select(Resume).where(Resume.candidate_id == candidate.candidate_id, Resume.extracted_text.is_not(None)).order_by(Resume.version.desc()).limit(1))
+    if not resume:
+        raise HTTPException(status_code=404, detail="Upload a parsed resume before evaluating project relevance")
+    try:
+        result = evaluate_github_resume_evidence(candidate.github_url, resume.extracted_text or "")
+    except (GitHubProfileError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {**result, "resume_id": resume.resume_id}
 
 
 def dsa_evaluation_payload(evaluation: DsaEvaluation) -> dict:

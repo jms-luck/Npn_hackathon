@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 
 from backend.app.core.audit_middleware import audit_request
@@ -36,6 +37,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.middleware("http")(audit_request)
 app.middleware("http")(rate_limit_request)
 app.middleware("http")(security_headers_request)
+app.add_middleware(GZipMiddleware, minimum_size=1_000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

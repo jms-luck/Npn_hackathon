@@ -33,6 +33,8 @@ def rate_rule(method: str, path: str) -> RateRule | None:
         return RateRule("matching", 30, 60)
     if method == "POST" and path == "/api/candidate/dsa-evaluation":
         return RateRule("external_profile", 10, 3_600)
+    if method == "POST" and path == "/api/candidate/github-evaluation":
+        return RateRule("external_profile", 10, 3_600)
     if method == "GET" and path == "/api/candidate/recommended-jobs":
         return RateRule("candidate_matching", 20, 3_600)
     return None

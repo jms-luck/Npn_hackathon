@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
@@ -6,21 +8,22 @@ from backend.app.database.connection import get_db
 from backend.app.models import Company, JobPosting
 from backend.app.schemas.contracts import CompanyResponse
 from backend.app.core.config import settings
-from backend.app.services.cache import cache_get, cache_set
+from backend.app.services.cache import cache_get, cache_get_raw, cache_set, cache_set_raw
 
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.get("/options")
-def company_options(db: Session = Depends(get_db)) -> list[dict]:
+@router.get("/options", response_class=Response)
+def company_options(db: Session = Depends(get_db)) -> Response:
     key = "companies:options"
-    if cached := cache_get(key):
-        return cached
+    if cached := cache_get_raw(key):
+        return Response(cached, media_type="application/json")
     rows = db.execute(select(Company.company_id, Company.company_name).order_by(Company.company_name)).all()
     payload = [{"company_id": company_id, "company_name": company_name} for company_id, company_name in rows]
-    cache_set(key, payload, settings.cache_company_ttl)
-    return payload
+    serialized = json.dumps(payload, separators=(",", ":"))
+    cache_set_raw(key, serialized, settings.cache_company_ttl)
+    return Response(serialized, media_type="application/json")
 
 
 @router.get("", response_model=list[CompanyResponse])

@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Hire AI engineering guide: architecture, implementation steps, design decisions, security, AI matching, data, and deployment." />
+  <title>Hire AI — Engineering Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Hire AI engineering guide home">
+      <img src="../frontend/src/utils/logo.svg" alt="" />
+      <span><strong>Hire AI</strong><small>Engineering guide</small></span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#architecture">Architecture</a>
+      <a href="#workflows">Workflows</a>
+      <a href="#ai">AI systems</a>
+      <a href="#security">Security</a>
+      <a href="#deployment">Deployment</a>
+    </nav>
+  </header>
+
+  <div class="layout" id="top">
+    <aside class="toc" aria-label="Guide contents">
+      <p class="toc-label">Contents</p>
+      <a href="#overview">01 Overview</a>
+      <a href="#decisions">02 Decision map</a>
+      <a href="#architecture">03 Architecture</a>
+      <a href="#repository">04 Repository</a>
+      <a href="#data-model">05 Data model</a>
+      <a href="#workflows">06 User workflows</a>
+      <a href="#resume">07 Resume pipeline</a>
+      <a href="#ai">08 AI matching</a>
+      <a href="#enrichment">09 Enrichment</a>
+      <a href="#graph">10 Neo4j graph</a>
+      <a href="#security">11 Security</a>
+      <a href="#performance">12 Performance</a>
+      <a href="#seeding">13 Data seeding</a>
+      <a href="#testing">14 Testing</a>
+      <a href="#deployment">15 Deployment</a>
+      <a href="#operations">16 Operations</a>
+    </aside>
+
+    <main id="main">
+      <section class="hero" id="overview">
+        <div class="hero-copy">
+          <p class="eyebrow">System design, implementation, and rationale</p>
+          <h1>How Hire AI works,<br />from upload to hiring decision.</h1>
+          <p class="lede">A source-linked walkthrough of the recruitment platform: every service, data flow, trust boundary, AI decision, deployment choice, and operational step.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="#architecture">Start with architecture</a>
+            <a class="button secondary" href="../readme">Open project README</a>
+          </div>
+        </div>
+        <div class="system-snapshot" aria-label="System snapshot">
+          <span class="snapshot-kicker">Current system</span>
+          <strong>4 role workspaces</strong>
+          <dl>
+            <div><dt>API</dt><dd>FastAPI</dd></div>
+            <div><dt>UI</dt><dd>React</dd></div>
+            <div><dt>Truth</dt><dd>PostgreSQL</dd></div>
+            <div><dt>Search</dt><dd>Qdrant</dd></div>
+            <div><dt>Graph</dt><dd>Neo4j</dd></div>
+            <div><dt>Storage</dt><dd>Azure Blob</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="band purpose-band">
+        <div><span class="number">01</span><p>The platform turns resumes and job descriptions into comparable evidence without replacing human review.</p></div>
+        <div><span class="number">02</span><p>PostgreSQL remains authoritative; AI and graph stores are rebuildable derived indexes.</p></div>
+        <div><span class="number">03</span><p>Every role sees only the workflow and records it is authorized to access.</p></div>
+      </section>
+
+      <section class="chapter" id="decisions">
+        <div class="chapter-heading"><p class="eyebrow">02 — Decision map</p><h2>Why these technologies were chosen</h2><p>Each component owns one type of problem. This prevents the vector database, graph database, or LLM from becoming an accidental source of truth.</p></div>
+        <div class="decision-table" role="table" aria-label="Technology decision map">
+          <div class="decision-row heading" role="row"><span>Need</span><span>Choice</span><span>Why</span><span>Why not the obvious alternative</span></div>
+          <div class="decision-row" role="row"><strong>Transactional hiring data</strong><span>PostgreSQL</span><p>Foreign keys, uniqueness, transactions, indexing, and mature operational tooling.</p><p>A document store would weaken cross-entity integrity for applications, resumes, jobs, and interviews.</p></div>
+          <div class="decision-row" role="row"><strong>API and authorization</strong><span>FastAPI + SQLAlchemy</span><p>Typed contracts, dependency-based RBAC, async-ready HTTP, and clear ORM ownership.</p><p>A large full-stack framework would add conventions without improving this API-centric boundary.</p></div>
+          <div class="decision-row" role="row"><strong>Role-based interface</strong><span>React + Vite</span><p>Fast development, route protection, reusable views, and a small production bundle.</p><p>Server templates would make the interactive admin, graph, upload, and filtering workflows harder to maintain.</p></div>
+          <div class="decision-row" role="row"><strong>Resume binaries</strong><span>Azure Blob Storage</span><p>Private object storage, content types, lifecycle support, and expiring SAS access.</p><p>Storing PDFs in PostgreSQL would inflate backups and database I/O.</p></div>
+          <div class="decision-row" role="row"><strong>Semantic retrieval</strong><span>Qdrant + cosine distance</span><p>Purpose-built HNSW nearest-neighbor search, metadata payloads, and efficient top-K ranking.</p><p>SQL text search finds words, not meaning; PostgreSQL should not carry millions of high-dimensional vectors here.</p></div>
+          <div class="decision-row" role="row"><strong>Relationship explanation</strong><span>Neo4j</span><p>Candidate, resume, job, company, and skill relationships are naturally traversable and visual.</p><p>Deep relational joins can answer the question, but do not communicate the relationship structure as clearly.</p></div>
+          <div class="decision-row" role="row"><strong>Hot response acceleration</strong><span>Redis</span><p>Low-latency cache, atomic rate limits, TTLs, and fail-open behavior.</p><p>Process memory would diverge across replicas and disappear during restarts.</p></div>
+          <div class="decision-row" role="row"><strong>Embeddings and narratives</strong><span>Azure OpenAI</span><p>Managed model deployments, strong embedding quality, and enterprise controls.</p><p>A locally hosted model would increase GPU, scaling, patching, and observability work.</p></div>
+        </div>
+      </section>
+
+      <section class="chapter" id="architecture">
+        <div class="chapter-heading"><p class="eyebrow">03 — Architecture</p><h2>One application, several specialized stores</h2><p>The browser talks only to FastAPI. Credentials and service keys never cross that boundary.</p></div>
+        <div class="architecture-map" aria-label="Hire AI architecture diagram">
+          <div class="arch-node browser"><small>Client</small><strong>React workspace</strong><span>Candidate · Recruiter · Interviewer · Admin</span></div>
+          <div class="connector vertical"><span>HTTPS / JSON</span></div>
+          <div class="arch-node api"><small>Control plane</small><strong>FastAPI</strong><span>JWT · RBAC · validation · orchestration · audit</span></div>
+          <div class="connector branches" aria-hidden="true"></div>
+          <div class="arch-services">
+            <div class="arch-node postgres"><small>Source of truth</small><strong>PostgreSQL</strong><span>Users, companies, jobs, applications, interviews</span></div>
+            <div class="arch-node blob"><small>Private files</small><strong>Azure Blob</strong><span>Versioned PDF and DOCX resumes</span></div>
+            <div class="arch-node qdrant"><small>Semantic index</small><strong>Qdrant</strong><span>Job and resume vectors</span></div>
+            <div class="arch-node neo"><small>Relationship index</small><strong>Neo4j</strong><span>Candidate-to-role evidence and gaps</span></div>
+            <div class="arch-node redis"><small>Acceleration</small><strong>Redis</strong><span>Cache and distributed rate limits</span></div>
+            <div class="arch-node openai"><small>Model service</small><strong>Azure OpenAI</strong><span>Embeddings and bounded explanations</span></div>
+          </div>
+        </div>
+        <div class="callout"><strong>Core invariant</strong><p>If Redis, Qdrant, or Neo4j is cleared, PostgreSQL and Blob Storage still preserve the hiring records. Derived stores can be rebuilt from authoritative data.</p></div>
+      </section>
+
+      <section class="chapter" id="repository">
+        <div class="chapter-heading"><p class="eyebrow">04 — Repository</p><h2>Ownership follows the domain</h2><p>Folders are organized by responsibility so HTTP, persistence, AI, and UI concerns do not collapse into one module.</p></div>
+        <div class="repo-grid">
+          <a href="../backend/app/routers"><code>backend/app/routers/</code><span>Role and domain REST endpoints</span></a>
+          <a href="../backend/app/services"><code>backend/app/services/</code><span>AI, Blob, cache, graph, audit, and validation logic</span></a>
+          <a href="../backend/app/models/entities.py"><code>backend/app/models/</code><span>SQLAlchemy relational entities</span></a>
+          <a href="../backend/app/core"><code>backend/app/core/</code><span>Configuration, security, dependencies, middleware, logging</span></a>
+          <a href="../frontend/src"><code>frontend/src/</code><span>React routes, role workspaces, components, and CSS</span></a>
+          <a href="../database"><code>database/</code><span>Base schema, indexes, and ordered migrations</span></a>
+          <a href="../scripts"><code>scripts/</code><span>Imports, embedding generation, graph seeding, preflight</span></a>
+          <a href="../tests"><code>tests/</code><span>Security, behavior, integration, and contract regression tests</span></a>
+        </div>
+      </section>
+
+      <section class="chapter" id="data-model">
+        <div class="chapter-heading"><p class="eyebrow">05 — Data model</p><h2>Relational records first</h2><p>Stable numeric keys maintain database integrity. Human-facing IDs such as <code>JOB_025</code> are presentation values, not replacement keys.</p></div>
+        <div class="schema-flow">
+          <div><strong>User</strong><span>identity · role · active state</span></div><b>1:1</b>
+          <div><strong>Candidate / Recruiter / Interviewer</strong><span>role-specific profile</span></div><b>1:N</b>
+          <div><strong>Resume / Job / Application</strong><span>versioned evidence and submission</span></div><b>1:1</b>
+          <div><strong>Interview / Match result</strong><span>assessment and explainability</span></div>
+        </div>
+        <details><summary>Why keep resume versions?</summary><p>An application must continue pointing to the exact resume submitted at that time. Replacing one mutable resume would rewrite historical evidence and make audit results unreliable.</p></details>
+        <details><summary>Why keep a global applicant pool?</summary><p>Global candidates are stored once in <code>global_applicants</code>. Materializing every candidate against every job would create billions of rows; recruiter queries merge explicit applications with the global pool on demand.</p></details>
+        <details><summary>Why are public IDs derived?</summary><p>Prefixes make support and UI conversations clearer while preserving all existing primary keys and foreign keys. The formatter and parser are isolated in <a href="../backend/app/services/public_ids.py"><code>public_ids.py</code></a>.</p></details>
+      </section>
+
+      <section class="chapter" id="workflows">
+        <div class="chapter-heading"><p class="eyebrow">06 — User workflows</p><h2>Four roles, four constrained workspaces</h2></div>
+        <div class="role-tabs">
+          <article><span class="role-tag candidate">Candidate</span><ol><li>Registers and optionally adds social profiles.</li><li>Uploads a validated resume.</li><li>Receives Qdrant-ranked job recommendations.</li><li>Reviews active jobs and applies with one resume version.</li><li>Tracks applications and DSA evidence.</li></ol><p class="why"><b>Why:</b> the candidate controls which evidence is submitted for each role.</p></article>
+          <article><span class="role-tag recruiter">Recruiter</span><ol><li>Registers with a company verification code.</li><li>Creates and publishes roles.</li><li>Uploads applicants in bounded batches.</li><li>Ranks candidates by resume-to-job similarity.</li><li>Opens explainable skill and relationship graphs.</li><li>Schedules interviews.</li></ol><p class="why"><b>Why:</b> company ownership is resolved from the authenticated profile, never trusted from request input.</p></article>
+          <article><span class="role-tag interviewer">Interviewer</span><ol><li>Registers against a verified company.</li><li>Views only assigned interviews.</li><li>Opens “Why suitable?” evidence.</li><li>Submits score and feedback.</li></ol><p class="why"><b>Why:</b> interviewers need focused evidence, not administrative access to the full talent pool.</p></article>
+          <article><span class="role-tag admin">Administrator</span><ol><li>Reviews platform datasets.</li><li>Manages companies and verification codes.</li><li>Controls user activation and records.</li><li>Uses secure resume access.</li><li>Searches the readable audit trail.</li></ol><p class="why"><b>Why:</b> operational powers are isolated behind an explicit admin role and audited routes.</p></article>
+        </div>
+      </section>
+
+      <section class="chapter" id="resume">
+        <div class="chapter-heading"><p class="eyebrow">07 — Resume pipeline</p><h2>Validate before storage, derive after commit</h2></div>
+        <ol class="step-list">
+          <li><span>01</span><div><h3>Receive the file</h3><p>Candidate or recruiter uploads PDF/DOCX through a bounded multipart endpoint.</p><p class="why"><b>Why:</b> limits are enforced before expensive parsing, network, or model calls.</p></div></li>
+          <li><span>02</span><div><h3>Verify actual structure</h3><p>PDF signature, encryption, and page limits are checked. DOCX ZIP structure, compression ratio, paths, macros, ActiveX, and embedded objects are validated.</p><p class="why"><b>Why:</b> a filename extension and browser MIME type are attacker-controlled metadata.</p></div></li>
+          <li><span>03</span><div><h3>Extract bounded text</h3><p>PyPDF and python-docx extract plain text with a character ceiling.</p><p class="why"><b>Why:</b> bounded evidence protects memory, prompt size, embedding cost, and downstream logs.</p></div></li>
+          <li><span>04</span><div><h3>Store privately</h3><p>The binary is written to a private Azure Blob container under a generated candidate/version path.</p><p class="why"><b>Why:</b> opaque paths prevent filename collisions and keep binaries out of PostgreSQL.</p></div></li>
+          <li><span>05</span><div><h3>Commit metadata</h3><p>PostgreSQL stores filename, Blob path, version, parsing status, extracted text, and candidate ownership.</p><p class="why"><b>Why:</b> durable relational ownership must succeed before optional indexes.</p></div></li>
+          <li><span>06</span><div><h3>Build derived evidence</h3><p>The text is embedded once and upserted into Qdrant; missing social profiles may be canonically extracted.</p><p class="why"><b>Why:</b> vector failures must not erase an already durable resume.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="chapter" id="ai">
+        <div class="chapter-heading"><p class="eyebrow">08 — AI matching</p><h2>Meaning becomes a searchable vector</h2><p>Candidate matching is retrieval, not an autonomous hiring decision.</p></div>
+        <div class="pipeline">
+          <div><small>Input A</small><strong>Resume text</strong></div><i>→</i>
+          <div><small>Model</small><strong>text-embedding-3-large</strong></div><i>→</i>
+          <div><small>Representation</small><strong>3,072 dimensions</strong></div><i>→</i>
+          <div><small>Index</small><strong>Qdrant HNSW</strong></div><i>→</i>
+          <div><small>Output</small><strong>Top 50 active jobs</strong></div>
+        </div>
+        <div class="formula"><span>cosine similarity</span><code>score = (resume · job) / (||resume|| × ||job||)</code><p>Closer vector direction means stronger semantic similarity, independent of document length.</p></div>
+        <div class="two-column">
+          <div><h3>Candidate → jobs</h3><p>The stored resume vector queries the global <code>job_embeddings</code> collection. Qdrant compares it against every indexed active job and returns top-K IDs; PostgreSQL then supplies current job/company details.</p></div>
+          <div><h3>Job → applicants</h3><p>The job vector queries a job-specific applicant collection. Canonical resume vectors are copied into that collection to avoid repeated Azure embedding calls.</p></div>
+        </div>
+        <div class="callout warning"><strong>Important</strong><p>“All jobs” means all jobs present in Qdrant. Startup preflight compares PostgreSQL active-job count with Qdrant points and reports incomplete coverage before users rely on recommendations.</p></div>
+      </section>
+
+      <section class="chapter" id="enrichment">
+        <div class="chapter-heading"><p class="eyebrow">09 — Evidence enrichment</p><h2>Extra signals are bounded and explainable</h2></div>
+        <div class="feature-grid">
+          <article><h3>GitHub project relevance</h3><p>The public profile URL is canonicalized, GitHub’s fixed API host is queried, and repository names, descriptions, topics, and languages are compared with resume project terms.</p><p class="why"><b>Why:</b> repository metadata can support project claims, but cannot prove account ownership. Its influence is capped at 15%.</p></article>
+          <article><h3>LeetCode DSA strength</h3><p>A fixed GraphQL endpoint returns difficulty and topic counts. Weighted core topics plus Easy/Medium/Hard depth produce a transparent 0–100 score.</p><p class="why"><b>Why:</b> published targets and topic bars are easier to challenge than an unexplained model label.</p></article>
+          <article><h3>LLM narrative</h3><p>A model summarizes evidence only after numeric retrieval. Resume/job text is serialized as untrusted JSON and output must pass a one-field plain-text schema.</p><p class="why"><b>Why:</b> narrative improves readability, but malformed or injected output falls back to deterministic text.</p></article>
+        </div>
+      </section>
+
+      <section class="chapter" id="graph">
+        <div class="chapter-heading"><p class="eyebrow">10 — Neo4j graph</p><h2>Show why, not only how much</h2></div>
+        <div class="mini-graph" aria-label="Candidate suitability relationship example">
+          <div class="graph-node candidate-node">Candidate</div>
+          <div class="graph-edge matched"><span>HAS SKILL</span></div>
+          <div class="graph-node skill matched-node">Python</div>
+          <div class="graph-edge required"><span>REQUIRES</span></div>
+          <div class="graph-node job-node">Backend role</div>
+          <div class="graph-edge gap"><span>MISSING SKILL</span></div>
+          <div class="graph-node skill gap-node">Kubernetes</div>
+        </div>
+        <ul class="relationship-list">
+          <li><code>Candidate -[:HAS_RESUME]→ Resume</code></li>
+          <li><code>Candidate -[:APPLIED_TO]→ Job</code></li>
+          <li><code>Resume -[:SUBMITTED_FOR]→ Job</code></li>
+          <li><code>Job -[:AT_COMPANY]→ Company</code></li>
+          <li><code>Job -[:REQUIRES]→ Skill</code></li>
+          <li class="positive"><code>Candidate -[:HAS_SKILL]→ Skill</code></li>
+          <li class="negative"><code>Candidate -[:MISSING_SKILL]→ Skill</code></li>
+        </ul>
+        <p class="why"><b>Why a relational fallback exists:</b> Neo4j improves explanation and visualization, but an outage must not hide applicants. The API can construct the same response from PostgreSQL/resume text and marks the source as <code>fallback</code>.</p>
+      </section>
+
+      <section class="chapter" id="security">
+        <div class="chapter-heading"><p class="eyebrow">11 — Security</p><h2>Controls at every trust boundary</h2></div>
+        <div class="security-grid">
+          <article><span>Identity</span><h3>JWT + Argon2 + database RBAC</h3><p>Tokens identify users; current role and active status come from PostgreSQL. Company/candidate ownership is never accepted from client claims.</p></article>
+          <article><span>Uploads</span><h3>Content verification</h3><p>Signature, structure, decompression, macro, path, size, page, encryption, and extraction limits run before storage.</p></article>
+          <article><span>Files</span><h3>Private Blob + SAS</h3><p>Only authorized users receive short-lived read URLs. Storage credentials never reach React.</p></article>
+          <article><span>AI</span><h3>Prompt and output boundaries</h3><p>Evidence is untrusted JSON. Output rejects HTML, URLs, extra fields, control characters, and oversized content.</p></article>
+          <article><span>Abuse</span><h3>Redis rate limits</h3><p>Login, registration, upload, matching, and profile checks use distributed atomic counters and auditable 429 responses.</p></article>
+          <article><span>Network</span><h3>SSRF-resistant clients</h3><p>GitHub and LeetCode calls use fixed HTTPS hosts. User input selects only a validated username.</p></article>
+          <article><span>Browser</span><h3>CSP and response headers</h3><p>CSP, frame denial, MIME protection, referrer and permissions policy, HSTS, and no-store sensitive responses.</p></article>
+          <article><span>Audit</span><h3>Structured, PII-aware logs</h3><p>Request ID, actor, role, route, status, outcome, duration, and masked network are recorded without bodies or secrets.</p></article>
+        </div>
+        <div class="callout"><strong>Administrator bootstrap</strong><p>No universal admin credential exists in source. Initial email and a 12+ character password must be supplied through environment configuration.</p></div>
+      </section>
+
+      <section class="chapter" id="performance">
+        <div class="chapter-heading"><p class="eyebrow">12 — Performance</p><h2>Spend latency where it creates value</h2></div>
+        <div class="metric-strip">
+          <div><strong>30 s</strong><span>public job cache</span></div>
+          <div><strong>5 min</strong><span>company cache</span></div>
+          <div><strong>5 min</strong><span>graph cache</span></div>
+          <div><strong>1 hour</strong><span>GitHub evidence cache</span></div>
+        </div>
+        <div class="two-column">
+          <div><h3>Optimizations used</h3><ul><li>HNSW approximate nearest neighbors</li><li>Canonical resume-vector reuse</li><li>Batched embedding and Qdrant upserts</li><li>Redis JSON and raw response caches</li><li>Gzip for large API/static responses</li><li>Server-side pagination and filtering</li><li>Database indexes on joins/filter columns</li></ul></div>
+          <div><h3>Failure behavior</h3><ul><li>Redis failure: continue from PostgreSQL</li><li>Neo4j failure: return relational graph</li><li>Qdrant failure: return clear unavailable state</li><li>LLM failure: deterministic explanation</li><li>Post-commit indexing failure: keep durable resume</li></ul></div>
+        </div>
+        <p>Repeat local measurements with <a href="../scripts/benchmark_http.py"><code>python scripts/benchmark_http.py</code></a>. Performance should be judged with the background seed status recorded because imports compete for database and network resources.</p>
+      </section>
+
+      <section class="chapter" id="seeding">
+        <div class="chapter-heading"><p class="eyebrow">13 — Data seeding</p><h2>Source first, indexes second</h2></div>
+        <ol class="step-list compact">
+          <li><span>01</span><div><h3>Companies</h3><code>python scripts/import_companies.py</code><p>Upserts normalized company records and generates missing verification codes.</p></div></li>
+          <li><span>02</span><div><h3>Jobs</h3><code>python scripts/import_jobs.py</code><p>Resumable chunks populate PostgreSQL. Checkpoint prevents restarting millions of rows.</p></div></li>
+          <li><span>03</span><div><h3>Applicants and Blob files</h3><code>python scripts/import_dummy_applicants.py --workers 8</code><p>Creates role records, resumes, global pool entries, and private Blob objects.</p></div></li>
+          <li><span>04</span><div><h3>Resume vectors and job collections</h3><code>python scripts/seed_docker_qdrant.py</code><p>Rebuildable Qdrant indexes are derived from parsed PostgreSQL resumes.</p></div></li>
+          <li><span>05</span><div><h3>Global job vectors</h3><code>python scripts/generate_job_embeddings.py</code><p>Runs only after job import so every active job can participate in candidate recommendations.</p></div></li>
+          <li><span>06</span><div><h3>Neo4j</h3><code>python scripts/seed_neo4j.py</code><p>MERGE-based relationships are idempotently derived from authoritative records.</p></div></li>
+        </ol>
+        <div class="callout warning"><strong>Why startup does not seed by default</strong><p>Embedding millions of jobs can run for hours and incur Azure cost. Container preflight reports <code>seed_*</code> versus <code>rebuild_*</code>; automatic seeding requires explicit opt-in.</p></div>
+      </section>
+
+      <section class="chapter" id="testing">
+        <div class="chapter-heading"><p class="eyebrow">14 — Testing</p><h2>Coverage follows risk</h2></div>
+        <div class="test-matrix">
+          <div><strong>Unit</strong><span>ID formatting, profile normalization, scoring, parsing</span></div>
+          <div><strong>Security</strong><span>Upload spoofing, macros, prompt output, rate limits, audit masking</span></div>
+          <div><strong>Behavior</strong><span>Matching ranking, fallback behavior, cache invalidation</span></div>
+          <div><strong>Contracts</strong><span>Required routes, RBAC responses, response fields</span></div>
+          <div><strong>Build</strong><span>Pytest, ESLint, Vite production bundle, Docker image</span></div>
+          <div><strong>Runtime</strong><span>Health, SPA fallback, external index preflight, live Neo4j</span></div>
+        </div>
+        <pre><code># Backend
+python -m pytest -q
+
+# Frontend
+cd frontend
+npm run lint
+npm run build
+
+# Container
+docker compose -f compose.single.yaml config --quiet
+docker compose -f compose.single.yaml up -d --build</code></pre>
+      </section>
+
+      <section class="chapter" id="deployment">
+        <div class="chapter-heading"><p class="eyebrow">15 — Deployment</p><h2>One app image, external state</h2><p>The production Dockerfile compiles React in a Node stage, installs Python dependencies in a slim runtime stage, and serves the SPA from FastAPI as a non-root user.</p></div>
+        <div class="deployment-flow"><div><strong>Node build stage</strong><span><code>npm ci</code> → Vite assets</span></div><i>→</i><div><strong>Python runtime</strong><span>FastAPI + assets + scripts</span></div><i>→</i><div><strong>Single app container</strong><span>Port 8000 (host 8080)</span></div></div>
+        <pre><code>copy .env.example .env
+# Fill secrets and external service URLs
+
+docker compose -f compose.single.yaml up -d --build
+docker compose -f compose.single.yaml logs -f app
+
+# Open
+http://127.0.0.1:8080</code></pre>
+        <p class="why"><b>Why external state:</b> PostgreSQL, Blob, Qdrant, Neo4j, and Redis have independent persistence, scaling, backup, and upgrade requirements. Packing them into the application image would make deployments fragile and data lifecycle unsafe.</p>
+      </section>
+
+      <section class="chapter" id="operations">
+        <div class="chapter-heading"><p class="eyebrow">16 — Operations</p><h2>Know what is healthy and what is complete</h2></div>
+        <div class="ops-grid">
+          <article><h3>Health</h3><code>GET /health</code><p>Confirms the web process. Startup logs separately report external index availability and counts.</p></article>
+          <article><h3>Audit</h3><code>logs/audit.log</code><p>Admin UI offers search, filters, readable actor/outcome fields, and detailed request context.</p></article>
+          <article><h3>Seeding</h3><code>logs/job_catalog_seed.out.log</code><p>Check checkpoints and compare PostgreSQL source counts with Qdrant/Neo4j counts.</p></article>
+          <article><h3>Performance</h3><code>scripts/benchmark_http.py</code><p>Measure p50/p95 and concurrent throughput from the deployed runtime.</p></article>
+        </div>
+        <div class="definition-done"><p class="eyebrow">Definition of done</p><h3>A deployment is ready when:</h3><ul><li>Schema and migrations are applied.</li><li>Health and protected-route checks pass.</li><li>PostgreSQL active jobs equal Qdrant job vectors for complete matching.</li><li>Parsed resumes are covered by resume vectors.</li><li>Neo4j preflight is available or fallback is explicitly accepted.</li><li>Frontend lint/build and backend tests pass.</li><li>No real secrets or datasets are committed.</li></ul></div>
+      </section>
+
+      <footer>
+        <div class="brand footer-brand"><img src="../frontend/src/utils/logo.svg" alt="" /><span><strong>Hire AI</strong><small>Engineering guide</small></span></div>
+        <p>Built from the live repository structure and implementation decisions.</p>
+        <a href="#top">Back to top</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

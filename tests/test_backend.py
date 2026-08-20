@@ -68,6 +68,7 @@ def test_required_routes_are_registered() -> None:
         "/api/candidate/match",
         "/api/candidate/recommended-jobs",
         "/api/candidate/dsa-evaluation",
+        "/api/candidate/github-evaluation",
         "/api/recruiter/jobs/{job_id}/match",
         "/api/recruiter/jobs/{job_id}",
         "/api/recruiter/jobs/{job_id}/applicants/bulk-template",

@@ -29,11 +29,30 @@ def cache_get(key: str) -> Any | None:
         return None
 
 
+def cache_get_raw(key: str) -> str | None:
+    try:
+        value = redis_client().get(key)
+        if value is not None:
+            logger.info("cache_hit", extra={"cache_key": key})
+        return value
+    except RedisError as exc:
+        logger.warning("cache_read_failed", extra={"cache_key": key, "error_type": type(exc).__name__})
+        return None
+
+
 def cache_set(key: str, value: Any, ttl: int | None = None) -> None:
     try:
         redis_client().setex(key, ttl or settings.cache_default_ttl, json.dumps(value, default=str))
         logger.info("cache_set", extra={"cache_key": key, "ttl": ttl or settings.cache_default_ttl})
     except (RedisError, TypeError) as exc:
+        logger.warning("cache_write_failed", extra={"cache_key": key, "error_type": type(exc).__name__})
+
+
+def cache_set_raw(key: str, value: str, ttl: int | None = None) -> None:
+    try:
+        redis_client().setex(key, ttl or settings.cache_default_ttl, value)
+        logger.info("cache_set", extra={"cache_key": key, "ttl": ttl or settings.cache_default_ttl})
+    except RedisError as exc:
         logger.warning("cache_write_failed", extra={"cache_key": key, "error_type": type(exc).__name__})
 
 
