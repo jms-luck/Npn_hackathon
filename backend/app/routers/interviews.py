@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -22,8 +22,14 @@ class InterviewCreate(BaseModel):
 
 
 class Feedback(BaseModel):
-    feedback: str
+    feedback: str = Field(min_length=3, max_length=5_000)
     score: float = Field(ge=0, le=100)
+
+
+@router.get("/recruiter/interviewers")
+def company_interviewers(recruiter: Recruiter = Depends(get_recruiter), db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.execute(select(Interviewer, User).join(User, Interviewer.user_id == User.user_id).where(Interviewer.company_id == recruiter.company_id, User.is_active.is_(True)).order_by(User.name)).all()
+    return [{"interviewer_id": interviewer.interviewer_id, "name": user.name, "email": user.email, "designation": interviewer.designation} for interviewer, user in rows]
 
 
 @router.post("/recruiter/interviews", status_code=201)
@@ -35,7 +41,12 @@ def schedule(payload: InterviewCreate, recruiter: Recruiter = Depends(get_recrui
         raise HTTPException(status_code=404, detail="Application not found")
     if not interviewer or interviewer.company_id != recruiter.company_id:
         raise HTTPException(status_code=404, detail="Interviewer not found")
-    interview = Interview(application_id=application.application_id, interviewer_id=interviewer.interviewer_id, scheduled_at=payload.scheduled_at)
+    scheduled_at = payload.scheduled_at if payload.scheduled_at.tzinfo else payload.scheduled_at.replace(tzinfo=timezone.utc)
+    if scheduled_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Interview must be scheduled in the future")
+    if db.scalar(select(Interview.interview_id).where(Interview.application_id == application.application_id)):
+        raise HTTPException(status_code=409, detail="An interview is already scheduled for this application")
+    interview = Interview(application_id=application.application_id, interviewer_id=interviewer.interviewer_id, scheduled_at=scheduled_at)
     application.status = "INTERVIEW"
     db.add(interview)
     db.commit()
@@ -107,4 +118,4 @@ def submit_feedback(interview_id: int, payload: Feedback, interviewer: Interview
     interview.score = payload.score
     interview.status = "COMPLETED"
     db.commit()
-    return {"interview_id": interview.interview_id, "status": interview.status}
+    return {"interview_id": interview.interview_id, "application_id": application.application_id, "interviewer_id": interviewer.interviewer_id, "scheduled_at": interview.scheduled_at, "status": interview.status}

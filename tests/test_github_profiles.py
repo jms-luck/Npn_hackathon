@@ -12,8 +12,8 @@ def test_github_username_requires_canonical_profile_url() -> None:
 def test_resume_related_repository_outranks_unrelated_repository() -> None:
     resume = "Projects: Built a FastAPI recruitment service with PostgreSQL, Redis, Docker, and React."
     repositories = [
-        {"name": "hire-api", "url": "https://github.com/jane/hire-api", "description": "FastAPI recruitment backend", "topics": ["postgresql", "redis", "docker"], "language": "Python", "archived": False, "updated_at": "2026-01-01T00:00:00Z"},
-        {"name": "recipe-book", "url": "https://github.com/jane/recipe-book", "description": "Family recipes and cooking notes", "topics": ["food"], "language": "HTML", "archived": False, "updated_at": "2026-01-01T00:00:00Z"},
+        {"name": "hire-api", "url": "https://github.com/jane/hire-api", "description": "FastAPI recruitment backend", "topics": ["postgresql", "redis", "docker"], "language": "Python", "languages": {"Python": 5000}, "readme_text": "FastAPI PostgreSQL Redis Docker", "stars": 3, "candidate_commits": 12, "fork": False, "archived": False, "updated_at": "2026-01-01T00:00:00Z"},
+        {"name": "recipe-book", "url": "https://github.com/jane/recipe-book", "description": "Family recipes and cooking notes", "topics": ["food"], "language": "HTML", "languages": {"HTML": 1000}, "readme_text": "recipes", "stars": 0, "candidate_commits": 2, "fork": False, "archived": False, "updated_at": "2026-01-01T00:00:00Z"},
     ]
     relevance, details = score_repository_relevance(resume, repositories)
     assert relevance > 40

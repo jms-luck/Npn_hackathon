@@ -174,6 +174,20 @@ def test_ranked_applicants_are_sorted_by_semantic_score(monkeypatch) -> None:
     assert returned_points == points
 
 
+def test_applicant_items_include_only_explicit_job_applications() -> None:
+    class Result:
+        def all(self):
+            return []
+
+    class FakeDb:
+        def execute(self, statement):
+            return Result()
+
+    items, resumes = matching.applicant_items(9, FakeDb())
+    assert items == []
+    assert resumes == []
+
+
 def test_ranking_degrades_without_hiding_applicants(monkeypatch) -> None:
     items = [{"application_id": 1, "candidate_id": 1, "candidate_name": "Available", "resume_id": 11}]
     monkeypatch.setattr(matching, "applicant_items", lambda job_id, db: (items, [SimpleNamespace(resume_id=11)]))

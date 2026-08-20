@@ -1,12 +1,14 @@
 import csv
 import logging
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from secrets import token_urlsafe
 from uuid import uuid4
+from zipfile import BadZipFile, ZipFile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from openpyxl import Workbook
 from pydantic import EmailStr, TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -75,21 +77,77 @@ def parse_rows(content: bytes) -> list[dict[str, str]]:
     return rows
 
 
+def resume_files_from_zip(content: bytes) -> list[tuple[str, bytes, str]]:
+    if len(content) > MAX_TOTAL_BYTES:
+        raise HTTPException(status_code=413, detail="Resume ZIP exceeds 500 MB")
+    try:
+        with ZipFile(BytesIO(content)) as archive:
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            if len(entries) > MAX_BULK_ROWS:
+                raise HTTPException(status_code=413, detail=f"Resume ZIP may contain at most {MAX_BULK_ROWS} files")
+            if sum(entry.file_size for entry in entries) > MAX_TOTAL_BYTES:
+                raise HTTPException(status_code=413, detail="Extracted ZIP content exceeds 500 MB")
+            files = []
+            for entry in entries:
+                path = Path(entry.filename)
+                if path.is_absolute() or ".." in path.parts:
+                    raise HTTPException(status_code=400, detail="Resume ZIP contains an unsafe path")
+                filename = path.name
+                if Path(filename).suffix.lower() not in {".pdf", ".docx"}:
+                    raise HTTPException(status_code=415, detail=f"Unsupported file in resume ZIP: {filename}")
+                payload = archive.read(entry)
+                try:
+                    safe_name, content_type = validate_resume_file(filename, payload)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=f"Unsafe resume file: {filename}") from exc
+                files.append((safe_name, payload, content_type))
+            return files
+    except BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid resume ZIP archive") from exc
+
+
+def credential_workbook(credentials: list[dict]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "New Applicants"
+    sheet.append(["Full Name", "Email", "Initial Password", "Candidate ID", "Resume"])
+    for item in credentials:
+        sheet.append([item["name"], item["email"], item["password"], item["candidate_id"], item["resume_filename"]])
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    for column, width in {"A": 28, "B": 34, "C": 28, "D": 16, "E": 34}.items():
+        sheet.column_dimensions[column].width = width
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 @router.post("/recruiter/jobs/{job_id}/applicants/bulk", status_code=201)
 def bulk_upload(
     job_id: int,
     csv_file: UploadFile = File(...),
-    resume_files: list[UploadFile] = File(...),
+    resume_files: list[UploadFile] | None = File(None),
+    resume_archive: UploadFile | None = File(None),
     recruiter: Recruiter = Depends(get_recruiter),
     db: Session = Depends(get_db),
 ) -> dict:
     job = owned_job(job_id, recruiter, db)
     rows = parse_rows(csv_file.file.read())
+    if not resume_files and not resume_archive:
+        raise HTTPException(status_code=400, detail="Upload a ZIP archive or individual resume files")
+    resume_files = resume_files or []
     if len(resume_files) > MAX_BULK_ROWS:
         raise HTTPException(status_code=413, detail=f"Upload at most {MAX_BULK_ROWS} resume files")
 
     files: dict[str, tuple[str, bytes, str | None]] = {}
     total_bytes = 0
+    if resume_archive:
+        for filename, content, content_type in resume_files_from_zip(resume_archive.file.read()):
+            key = filename.lower()
+            if key in files:
+                raise HTTPException(status_code=400, detail=f"Duplicate resume filename: {filename}")
+            files[key] = (filename, content, content_type)
+            total_bytes += len(content)
     for upload in resume_files:
         filename = Path(upload.filename or "").name
         extension = Path(filename).suffix.lower()
@@ -120,15 +178,16 @@ def bulk_upload(
     candidates_by_user = {item.user_id: item for item in db.scalars(select(Candidate).where(Candidate.user_id.in_([user.user_id for user in existing_users])))} if existing_users else {}
     existing_candidate_ids = [candidate.candidate_id for candidate in candidates_by_user.values()]
     applied_candidates = set(db.scalars(select(Application.candidate_id).where(Application.job_id == job_id, Application.candidate_id.in_(existing_candidate_ids)))) if existing_candidate_ids else set()
-    fallback_password_hash = hash_password(token_urlsafe(32))
     uploaded_blob_paths = []
     created_resumes: list[Resume] = []
     created_candidates = 0
     skipped = 0
+    credentials = []
 
     try:
         for row in rows:
             user = users_by_email.get(row["email"])
+            initial_password = None
             if user and user.role != "CANDIDATE":
                 raise HTTPException(status_code=409, detail=f"Email belongs to a {user.role.lower()} account: {row['email']}")
             candidate = candidates_by_user.get(user.user_id) if user else None
@@ -136,7 +195,8 @@ def bulk_upload(
                 skipped += 1
                 continue
             if not user:
-                user = User(name=row["full_name"], email=row["email"], password_hash=fallback_password_hash, role="CANDIDATE")
+                initial_password = token_urlsafe(14)
+                user = User(name=row["full_name"], email=row["email"], password_hash=hash_password(initial_password), role="CANDIDATE")
                 db.add(user)
                 db.flush()
                 users_by_email[user.email] = user
@@ -146,6 +206,8 @@ def bulk_upload(
                 db.flush()
                 candidates_by_user[user.user_id] = candidate
                 created_candidates += 1
+                if initial_password:
+                    credentials.append({"name": user.name, "email": user.email, "password": initial_password, "candidate_id": candidate.candidate_id, "resume_filename": row["resume_filename"]})
 
             version = (db.scalar(select(func.max(Resume.version)).where(Resume.candidate_id == candidate.candidate_id)) or 0) + 1
             filename, content, content_type = files[row["resume_key"]]
@@ -198,12 +260,16 @@ def bulk_upload(
     except Exception:
         graph_synced = False
         logger.exception("Bulk applicants were saved but Neo4j sync failed for job %s", job_id)
-    return {
-        "job_id": job_id,
-        "rows": len(rows),
-        "applications_created": len(created_resumes),
-        "candidates_created": created_candidates,
-        "duplicates_skipped": skipped,
-        "indexed": indexed,
-        "graph_synced": graph_synced,
-    }
+    workbook = credential_workbook(credentials)
+    return Response(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="job-{job_id}-new-applicant-credentials.xlsx"',
+            "X-Applications-Created": str(len(created_resumes)),
+            "X-Candidates-Created": str(created_candidates),
+            "X-Duplicates-Skipped": str(skipped),
+            "X-Indexed": str(indexed).lower(),
+            "X-Graph-Synced": str(graph_synced).lower(),
+        },
+    )

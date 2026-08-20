@@ -26,3 +26,7 @@ export async function api(path, options = {}) {
 export async function apiBlob(path, options = {}) {
   return (await request(path, options)).blob();
 }
+
+export async function apiResponse(path, options = {}) {
+  return request(path, options);
+}

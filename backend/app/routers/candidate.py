@@ -92,9 +92,20 @@ def candidate_resumes(candidate: Candidate = Depends(get_candidate), db: Session
     return list(db.scalars(select(Resume).where(Resume.candidate_id == candidate.candidate_id).order_by(Resume.version.desc())))
 
 
-@router.get("/candidate/applications", response_model=list[ApplicationResponse])
-def candidate_applications(candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[Application]:
-    return list(db.scalars(select(Application).where(Application.candidate_id == candidate.candidate_id).order_by(Application.applied_at.desc())))
+@router.get("/candidate/applications")
+def candidate_applications(candidate: Candidate = Depends(get_candidate), db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.execute(select(Application, JobPosting, Company, Interview).join(JobPosting, Application.job_id == JobPosting.job_id).join(Company, JobPosting.company_id == Company.company_id).outerjoin(Interview, Interview.application_id == Application.application_id).where(Application.candidate_id == candidate.candidate_id).order_by(Application.applied_at.desc())).all()
+    return [{
+        "application_id": application.application_id,
+        "job_id": job.job_id,
+        "job_title": job.job_title,
+        "company_name": company.company_name,
+        "resume_id": application.resume_id,
+        "status": application.status,
+        "applied_at": application.applied_at,
+        "interview_status": interview.status if interview else None,
+        "interview_scheduled_at": interview.scheduled_at if interview else None,
+    } for application, job, company, interview in rows]
 
 
 @router.post("/jobs/{job_id}/apply", response_model=ApplicationResponse, status_code=201)

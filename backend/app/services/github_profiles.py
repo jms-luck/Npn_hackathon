@@ -1,5 +1,7 @@
 import json
 import re
+import base64
+import math
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -58,12 +60,47 @@ def fetch_public_github_evidence(profile_url: str) -> dict:
     if cached := cache_get(cache_key):
         return cached
     profile = _github_get(f"/users/{username}")
-    repositories = _github_get(f"/users/{username}/repos?per_page=100&sort=updated&type=owner")
+    repository_limit = 30 if settings.github_token else 10
+    repositories = _github_get(f"/users/{username}/repos?per_page={repository_limit}&sort=updated")
     if not isinstance(profile, dict) or not isinstance(repositories, list):
         raise GitHubProfileError("GitHub returned an unexpected response")
     canonical_login = str(profile.get("login") or "")
     canonical_url = str(profile.get("html_url") or "")
     verified = canonical_login.lower() == username.lower() and canonical_url.lower().rstrip("/") == profile_url.lower().rstrip("/")
+    repository_evidence = []
+    for repo in repositories[:repository_limit]:
+        owner = str((repo.get("owner") or {}).get("login") or username)
+        name = str(repo.get("name") or "")
+        try:
+            languages = _github_get(f"/repos/{owner}/{name}/languages")
+        except GitHubProfileError:
+            languages = {}
+        try:
+            readme_payload = _github_get(f"/repos/{owner}/{name}/readme")
+            readme_text = base64.b64decode((readme_payload or {}).get("content", "")).decode("utf-8", errors="ignore")[:20_000]
+        except (GitHubProfileError, ValueError):
+            readme_text = ""
+        try:
+            commits = _github_get(f"/repos/{owner}/{name}/commits?author={username}&per_page=100")
+            candidate_commits = len(commits) if isinstance(commits, list) else 0
+        except GitHubProfileError:
+            candidate_commits = 0
+        if repo.get("fork") and candidate_commits == 0:
+            continue
+        repository_evidence.append({
+            "name": name,
+            "url": repo.get("html_url"),
+            "description": repo.get("description"),
+            "topics": repo.get("topics") or [],
+            "language": repo.get("language"),
+            "languages": languages if isinstance(languages, dict) else {},
+            "readme_text": readme_text,
+            "fork": bool(repo.get("fork")),
+            "archived": bool(repo.get("archived")),
+            "updated_at": repo.get("pushed_at") or repo.get("updated_at"),
+            "stars": int(repo.get("stargazers_count") or 0),
+            "candidate_commits": candidate_commits,
+        })
     evidence = {
         "verified": verified,
         "verification_status": "VERIFIED_PUBLIC_PROFILE" if verified else "PROFILE_MISMATCH",
@@ -72,20 +109,7 @@ def fetch_public_github_evidence(profile_url: str) -> dict:
         "profile_name": profile.get("name"),
         "created_at": profile.get("created_at"),
         "public_repositories": int(profile.get("public_repos") or 0),
-        "repositories": [
-            {
-                "name": repo.get("name"),
-                "url": repo.get("html_url"),
-                "description": repo.get("description"),
-                "topics": repo.get("topics") or [],
-                "language": repo.get("language"),
-                "fork": bool(repo.get("fork")),
-                "archived": bool(repo.get("archived")),
-                "updated_at": repo.get("updated_at"),
-            }
-            for repo in repositories
-            if not repo.get("fork")
-        ],
+        "repositories": repository_evidence,
     }
     cache_set(cache_key, evidence, settings.cache_github_ttl)
     return evidence
@@ -101,17 +125,30 @@ def score_repository_relevance(resume_text: str, repositories: list[dict]) -> tu
     for repository in repositories:
         if repository.get("archived"):
             continue
+        languages = repository.get("languages") or ({repository.get("language"): 1} if repository.get("language") else {})
         repo_text = " ".join(
             [
                 str(repository.get("name") or "").replace("-", " ").replace("_", " "),
                 str(repository.get("description") or ""),
                 " ".join(repository.get("topics") or []),
-                str(repository.get("language") or ""),
+                " ".join(languages.keys()),
+                str(repository.get("readme_text") or ""),
             ]
         )
         repo_tokens = _tokens(repo_text)
         matched = sorted(resume_tokens & repo_tokens)
-        score = round(min(len(matched) / max(1, min(len(repo_tokens), 10)), 1.0) * 100)
+        raw_signal = min(len(matched) / max(1, min(len(repo_tokens), 12)), 1.0)
+        ownership_weight = 1.0 if not repository.get("fork") else min(1.0, int(repository.get("candidate_commits") or 0) / 5)
+        activity_weight = min(1.0, 0.5 + 0.1 * min(int(repository.get("stars") or 0), 5))
+        updated_at = repository.get("updated_at")
+        if updated_at:
+            pushed = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+            days = (datetime.now(timezone.utc) - pushed).days
+            recency_weight = 1.0 if days <= 180 else 0.85 if days <= 365 else 0.6 if days <= 730 else 0.4
+        else:
+            recency_weight = 0.5
+        weighted_signal = raw_signal * ownership_weight * activity_weight * recency_weight
+        score = round((1 - math.exp(-weighted_signal / 0.35)) * 100) if weighted_signal else 0
         scored.append({
             "name": repository.get("name"),
             "url": repository.get("url"),
@@ -119,6 +156,8 @@ def score_repository_relevance(resume_text: str, repositories: list[dict]) -> tu
             "relevance_score": score,
             "matched_terms": matched[:10],
             "updated_at": repository.get("updated_at"),
+            "candidate_commits": int(repository.get("candidate_commits") or 0),
+            "evidence": {"languages": sorted(languages), "topics": repository.get("topics") or [], "readme_match": bool(matched)},
         })
     scored.sort(key=lambda item: (-item["relevance_score"], item["name"] or ""))
     top = [item for item in scored if item["relevance_score"] > 0][:3]

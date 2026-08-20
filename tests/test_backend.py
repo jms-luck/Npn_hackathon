@@ -61,6 +61,7 @@ def test_required_routes_are_registered() -> None:
     paths = app.openapi()["paths"]
     required = {
         "/api/auth/login",
+        "/api/assistant/chat",
         "/api/auth/profile",
         "/api/jobs",
         "/api/companies/options",
@@ -76,6 +77,7 @@ def test_required_routes_are_registered() -> None:
         "/api/recruiter/jobs/{job_id}/applicants/bulk",
         "/api/recruiter/jobs/{job_id}/applicants/{candidate_id}/suitability",
         "/api/interviewer/candidates",
+        "/api/recruiter/interviewers",
         "/api/interviewer/interviews/{interview_id}/suitability",
         "/api/auth/register/interviewer",
         "/api/admin/overview",

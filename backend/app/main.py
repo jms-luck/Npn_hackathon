@@ -11,7 +11,7 @@ from backend.app.core.config import settings
 from backend.app.core.logging_config import service_logger, setup_logging
 from backend.app.core.rate_limit import rate_limit_request
 from backend.app.core.security_headers import security_headers_request
-from backend.app.routers import admin, auth, bulk, candidate, companies, interviews, jobs, matching, resumes
+from backend.app.routers import admin, assistant, auth, bulk, candidate, companies, interviews, jobs, matching, resumes
 from backend.app.services.bootstrap import ensure_default_admin
 from backend.app.services.verification_codes import ensure_company_verification_codes
 from backend.app.database.connection import SessionLocal
@@ -47,6 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(assistant.router, prefix=settings.api_prefix)
 app.include_router(companies.router, prefix=settings.api_prefix)
 app.include_router(jobs.router, prefix=settings.api_prefix)
 app.include_router(candidate.router, prefix=settings.api_prefix)

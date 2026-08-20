@@ -105,12 +105,9 @@ def recruiter_job(job_id: int, recruiter: Recruiter, db: Session) -> JobPosting:
 
 def applicant_items(job_id: int, db: Session) -> tuple[list[dict], list[Resume]]:
     rows = db.execute(select(Application, Resume, Candidate, User).join(Resume, Application.resume_id == Resume.resume_id).join(Candidate, Application.candidate_id == Candidate.candidate_id).join(User, Candidate.user_id == User.user_id).where(Application.job_id == job_id)).all()
-    explicit_candidate_ids = {candidate.candidate_id for _, _, candidate, _ in rows}
-    global_rows = db.execute(select(GlobalApplicant, Resume, Candidate, User).join(Resume, GlobalApplicant.resume_id == Resume.resume_id).join(Candidate, GlobalApplicant.candidate_id == Candidate.candidate_id).join(User, Candidate.user_id == User.user_id).where(GlobalApplicant.candidate_id.not_in(explicit_candidate_ids))).all()
     explicit = [{"application_id": app.application_id, "candidate_id": candidate.candidate_id, "candidate_name": user.name, "resume_id": resume.resume_id, "applied_at": app.applied_at, "status": app.status, "scope": "JOB"} for app, resume, candidate, user in rows]
-    global_items = [{"application_id": -item.global_applicant_id, "candidate_id": candidate.candidate_id, "candidate_name": user.name, "resume_id": resume.resume_id, "applied_at": item.applied_at, "status": item.status, "scope": "ALL_JOBS"} for item, resume, candidate, user in global_rows]
-    resumes = [resume for _, resume, _, _ in rows] + [resume for _, resume, _, _ in global_rows]
-    return explicit + global_items, resumes
+    resumes = [resume for _, resume, _, _ in rows]
+    return explicit, resumes
 
 
 def ranked_applicant_items(job: JobPosting, db: Session) -> tuple[list[dict], list]:
@@ -172,8 +169,7 @@ def applicant_suitability(job_id: int, candidate_id: int, recruiter: Recruiter =
     user = db.get(User, candidate.user_id) if candidate else None
     company = db.get(Company, job.company_id)
     application = db.scalar(select(Application).where(Application.job_id == job_id, Application.candidate_id == candidate_id))
-    global_item = None if application else db.scalar(select(GlobalApplicant).where(GlobalApplicant.candidate_id == candidate_id))
-    resume = db.get(Resume, application.resume_id if application else global_item.resume_id) if application or global_item else None
+    resume = db.get(Resume, application.resume_id) if application else None
     if not candidate or not user or not company or not resume:
         raise HTTPException(status_code=404, detail="Applicant not found")
     semantic_score = None
@@ -183,9 +179,7 @@ def applicant_suitability(job_id: int, candidate_id: int, recruiter: Recruiter =
             semantic_score = round(max(0.0, min(1.0, float(points[0].score))) * 100, 3)
     except Exception:
         logger.exception("Could not calculate suitability score for job %s candidate %s", job_id, candidate_id)
-    scope = "JOB" if application else "ALL_JOBS"
-    status = application.status if application else global_item.status
-    result = graph_suitability(job, candidate, user, resume, company, semantic_score, scope, status)
+    result = graph_suitability(job, candidate, user, resume, company, semantic_score, "JOB", application.status)
     stored_match = db.scalar(select(MatchResult).where(MatchResult.job_id == job_id, MatchResult.candidate_id == candidate_id))
     result["explainability"] = build_suitability_explanation(job, candidate, resume, stored_match, semantic_score)
     return result
