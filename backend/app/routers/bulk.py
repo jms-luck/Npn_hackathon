@@ -271,5 +271,6 @@ def bulk_upload(
             "X-Duplicates-Skipped": str(skipped),
             "X-Indexed": str(indexed).lower(),
             "X-Graph-Synced": str(graph_synced).lower(),
+            "Cache-Control": "no-store, max-age=0",
         },
     )

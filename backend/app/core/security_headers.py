@@ -20,7 +20,7 @@ async def security_headers_request(request: Request, call_next):
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     else:
         response.headers["Content-Security-Policy"] = "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    if request.url.path.startswith(SENSITIVE_PREFIXES) or "/match" in request.url.path or "/suitability" in request.url.path:
+    if request.url.path.startswith(SENSITIVE_PREFIXES) or "/match" in request.url.path or "/suitability" in request.url.path or "/applicants/bulk" in request.url.path:
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
     if request.url.scheme == "https":
