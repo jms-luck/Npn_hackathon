@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.dependencies import get_candidate
 from backend.app.database.connection import get_db
-from backend.app.models import Application, Candidate, Company, DsaEvaluation, JobPosting, Resume, User
+from backend.app.models import Application, Candidate, Company, DsaEvaluation, Interview, JobPosting, Resume, User
 from backend.app.schemas.contracts import ApplicationCreate, ApplicationResponse, DsaEvaluationRequest, DsaEvaluationResponse, ResumeResponse
 from backend.app.services.ai import index_resume_for_job
 from backend.app.services.cache import cache_get, cache_set
