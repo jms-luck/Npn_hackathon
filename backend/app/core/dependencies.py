@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import decode_access_token
 from backend.app.database.connection import get_db
 from backend.app.models import Candidate, Interviewer, Recruiter, User
+from backend.app.core.config import settings
+from backend.app.services.cache import cache_get, cache_set
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -19,9 +21,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         user_id = int(payload["sub"])
     except (ValueError, KeyError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    key = f"auth:user:{user_id}"
+    cached = cache_get(key)
+    if cached:
+        return User(**cached)
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive or missing user")
+    cache_set(key, {"user_id": user.user_id, "name": user.name, "email": user.email, "password_hash": "", "role": user.role, "is_active": user.is_active}, settings.cache_profile_ttl)
     return user
 
 

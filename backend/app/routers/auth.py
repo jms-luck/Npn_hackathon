@@ -73,7 +73,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if payload.role and user.role != payload.role.upper():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"This account is not registered as {payload.role.lower()}")
-    return TokenResponse(access_token=create_access_token(user.user_id, user.role))
+    return TokenResponse(access_token=create_access_token(user.user_id, user.role), user=UserResponse.model_validate(user).model_dump(mode="json"))
 
 
 @router.get("/me", response_model=UserResponse)

@@ -71,6 +71,7 @@ async def audit_request(request: Request, call_next):
                 cache_delete_prefix("companies:")
             if "/users" in request.url.path or "/candidates" in request.url.path or "/recruiters" in request.url.path or "/interviewers" in request.url.path or "/resumes" in request.url.path or "/auth/register" in request.url.path:
                 cache_delete_prefix("profile:")
+                cache_delete_prefix("auth:user:")
         fields.update({"status": response.status_code, "duration_ms": round((perf_counter() - started) * 1000, 2), "outcome": "success" if response.status_code < 400 else "rejected"})
         service_logger(service).info("http_request", extra=fields)
         audit_event(service, "http_request", **{key: value for key, value in fields.items() if key != "service"})
