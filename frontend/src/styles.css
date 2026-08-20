@@ -127,6 +127,11 @@ a.job-row:hover { background: #ecebe4; padding-left: 16px; padding-right: 16px; 
 .applicant-name:disabled { opacity: .6; cursor: wait; }
 .github-verified { color: var(--green); font-weight: 700; }
 .github-unverified { color: var(--muted); }
+.verification-progress { margin-bottom: 24px; padding: 20px; border: 1px solid var(--line); background: #fbfaf6; }
+.verification-progress.complete { background: #eef4df; }.verification-progress.failed { border-color: #d7aaa6; background: #f9e8e6; }
+.verification-progress-head { display: flex; justify-content: space-between; align-items: start; gap: 20px; }.verification-progress-head h3 { margin: 0; text-transform: capitalize; }.verification-progress-head > strong { font-size: 25px; }
+.verification-track { height: 10px; margin: 18px 0; background: #deded5; overflow: hidden; }.verification-track i { display: block; height: 100%; background: var(--green); transition: width .35s ease; }.verification-progress.failed .verification-track i { background: #a1342f; }
+.verification-counts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); }.verification-counts span { padding: 12px 12px 0 0; }.verification-counts small, .verification-counts strong { display: block; }.verification-counts small { color: var(--muted); font-size: 9px; letter-spacing: .07em; }.verification-counts strong { margin-top: 4px; }
 .match-score { min-width: 140px; padding: 15px; background: var(--lime); text-align: right; display: grid; gap: 3px; }
 .match-score strong { font-size: 20px; }
 .match-score.pending { background: #e4e4dc; color: var(--muted); }
@@ -279,6 +284,7 @@ tbody tr:hover { background: #eef4df; }
   .list-controls, .admin-controls { grid-template-columns: 1fr 1fr; }.list-controls > label:first-child { grid-column: 1 / -1; }.list-controls > span { padding: 8px 0 0; }
   .admin-metrics { grid-template-columns: repeat(2, 1fr); }.admin-metrics article { border-bottom: 1px solid var(--line); }.admin-tabs { display: grid; grid-template-columns: 1fr 1fr; }
   .applicant-row { grid-template-columns: 46px 1fr; gap: 15px; }.match-score { grid-column: 2; min-width: 0; text-align: left; justify-self: start; }
+  .verification-counts { grid-template-columns: 1fr 1fr; }.verification-progress-head { align-items: end; }
   .company-form { grid-template-columns: 1fr; }.company-form .wide { grid-column: auto; }
   .modal-fields, .detail-modal dl { grid-template-columns: 1fr; }.modal-fields label:has(textarea) { grid-column: auto; }.admin-modal { padding: 25px 20px; }
   .graph-modal { padding: 24px 16px; }.graph-head, .graph-evidence { grid-template-columns: 1fr; }.graph-score { justify-self: start; text-align: left; }

@@ -9,6 +9,17 @@ def test_job_resume_collection_is_deterministic() -> None:
     assert ai.job_resume_collection(42) == "job_42_applicant_resumes"
 
 
+def test_match_progress_payload_is_bounded_and_identifiable(monkeypatch) -> None:
+    stored = []
+    monkeypatch.setattr(matching, "cache_set", lambda key, value, ttl: stored.append((key, value, ttl)))
+    payload = matching.publish_match_progress(42, processed=7, total=20, github_processed=3, llm_processed=7, percent=35)
+    assert payload["job_id"] == 42
+    assert payload["processed"] == 7
+    assert payload["percent"] == 35
+    assert stored[0][0] == "match:progress:42"
+    assert "candidate" not in payload
+
+
 def test_qdrant_upserts_are_batched() -> None:
     batch_sizes = []
 

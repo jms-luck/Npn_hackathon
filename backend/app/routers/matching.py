@@ -15,10 +15,31 @@ from backend.app.services.graph import graph_suitability
 from backend.app.services.github_profiles import GitHubProfileError, evaluate_github_resume_evidence
 from backend.app.services.explainability import build_suitability_explanation
 from backend.app.routers.jobs import job_payload
+from backend.app.services.cache import cache_get, cache_set
 
 
 router = APIRouter(tags=["matching"])
 logger = logging.getLogger("hireai.matching")
+MATCH_PROGRESS_TTL = 900
+
+
+def match_progress_key(job_id: int) -> str:
+    return f"match:progress:{job_id}"
+
+
+def publish_match_progress(job_id: int, **values) -> dict:
+    payload = {
+        "job_id": job_id,
+        "status": values.get("status", "RUNNING"),
+        "stage": values.get("stage", "PREPARING"),
+        "processed": values.get("processed", 0),
+        "total": values.get("total", 0),
+        "github_processed": values.get("github_processed", 0),
+        "llm_processed": values.get("llm_processed", 0),
+        "percent": values.get("percent", 0),
+    }
+    cache_set(match_progress_key(job_id), payload, MATCH_PROGRESS_TTL)
+    return payload
 
 
 def combined_match_score(semantic_score: float, github_evidence: dict) -> float:
@@ -138,6 +159,12 @@ def applicants(job_id: int, recruiter: Recruiter = Depends(get_recruiter), db: S
     return apply_stored_match_scores(items, job_id, db)
 
 
+@router.get("/recruiter/jobs/{job_id}/match-progress")
+def match_progress(job_id: int, recruiter: Recruiter = Depends(get_recruiter), db: Session = Depends(get_db)) -> dict:
+    recruiter_job(job_id, recruiter, db)
+    return cache_get(match_progress_key(job_id)) or publish_match_progress(job_id, status="IDLE", stage="READY")
+
+
 @router.get("/recruiter/jobs/{job_id}/applicants/{candidate_id}/suitability")
 def applicant_suitability(job_id: int, candidate_id: int, recruiter: Recruiter = Depends(get_recruiter), db: Session = Depends(get_db)) -> dict:
     job = recruiter_job(job_id, recruiter, db)
@@ -167,18 +194,27 @@ def applicant_suitability(job_id: int, candidate_id: int, recruiter: Recruiter =
 @router.post("/recruiter/jobs/{job_id}/match", response_model=list[MatchResponse])
 def match_applicants(job_id: int, recruiter: Recruiter = Depends(get_recruiter), db: Session = Depends(get_db)) -> list[MatchResult]:
     job = recruiter_job(job_id, recruiter, db)
+    publish_match_progress(job_id, status="RUNNING", stage="RANKING_RESUMES")
     items, points = ranked_applicant_items(job, db)
+    total = len(points)
+    publish_match_progress(job_id, status="RUNNING", stage="VERIFYING_EVIDENCE", total=total)
     applicant_by_resume = {item["resume_id"]: item["candidate_id"] for item in items}
     db.execute(delete(MatchResult).where(MatchResult.job_id == job_id))
     results = []
+    github_processed = 0
+    llm_processed = 0
     for position, point in enumerate(points):
         resume_id = int(point.payload["resume_id"])
         resume = db.get(Resume, resume_id)
         candidate = db.get(Candidate, applicant_by_resume[resume_id])
         semantic_score = max(0.0, min(1.0, float(point.score))) * 100
-        github_evidence = github_evidence_for(candidate, resume) if position < settings.github_evaluations_per_match else {"verified": False, "verification_status": "SKIPPED_COST_LIMIT", "relevance_score": None, "repositories": []}
+        should_check_github = position < settings.github_evaluations_per_match and bool(candidate.github_url)
+        github_evidence = github_evidence_for(candidate, resume) if should_check_github else {"verified": False, "verification_status": "NOT_PROVIDED" if not candidate.github_url else "SKIPPED_COST_LIMIT", "relevance_score": None, "repositories": []}
+        github_processed += int(should_check_github)
         overall_score = combined_match_score(semantic_score, github_evidence)
-        explanation = explain_match(prepare_job_text(job), resume.extracted_text or "", semantic_score / 100) if position < settings.llm_explanations_per_match else fallback_match_explanation(semantic_score / 100)
+        should_explain = position < settings.llm_explanations_per_match
+        explanation = explain_match(prepare_job_text(job), resume.extracted_text or "", semantic_score / 100) if should_explain else fallback_match_explanation(semantic_score / 100)
+        llm_processed += int(should_explain)
         result = MatchResult(
             job_id=job_id,
             candidate_id=candidate.candidate_id,
@@ -194,12 +230,16 @@ def match_applicants(job_id: int, recruiter: Recruiter = Depends(get_recruiter),
         )
         db.add(result)
         results.append(result)
+        processed = position + 1
+        if processed % 5 == 0 or processed == total:
+            publish_match_progress(job_id, status="RUNNING", stage="VERIFYING_EVIDENCE", processed=processed, total=total, github_processed=github_processed, llm_processed=llm_processed, percent=round(processed / max(total, 1) * 100))
     results.sort(key=lambda item: item.overall_score, reverse=True)
     for rank, result in enumerate(results, start=1):
         result.ranking = rank
     db.commit()
     for result in results:
         db.refresh(result)
+    publish_match_progress(job_id, status="COMPLETE", stage="COMPLETE", processed=total, total=total, github_processed=github_processed, llm_processed=llm_processed, percent=100)
     return results
 
 
