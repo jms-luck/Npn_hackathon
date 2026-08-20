@@ -161,13 +161,13 @@ input:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 2px 
 .upload input { display: none; }
 .error { color: #a1342f; }
 .notice { color: var(--muted); }.success { color: var(--green); }
-.auth-page { min-height: 100vh; display: grid; grid-template-columns: 1.25fr .75fr; background: #ecebe4; }
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); background: #ecebe4; overflow-x: hidden; }
 .auth-copy { background: #173f35; color: white; padding: 52px 7vw; display: flex; flex-direction: column; justify-content: flex-end; position: relative; overflow: hidden; }
 .auth-copy::after { content: ''; position: absolute; width: 48%; aspect-ratio: 1; border: 1px solid #5e8478; transform: rotate(32deg); right: -10%; top: 18%; }
 .auth-copy h1 { font-size: clamp(48px, 7vw, 94px); line-height: .98; letter-spacing: 0; max-width: 850px; margin-bottom: 26px; position: relative; z-index: 1; }
 .auth-copy > p:last-child { max-width: 520px; color: #bfd0ca; font-size: 18px; line-height: 1.5; }
 .auth-copy .eyebrow { color: var(--lime); }
-.auth-form { align-self: center; width: 100%; max-width: 560px; padding: 12%; display: grid; gap: 20px; }
+.auth-form { align-self: center; width: 100%; min-width: 0; max-width: 560px; padding: 12%; display: grid; gap: 20px; }
 .auth-form h2 { font-size: 30px; margin-bottom: 12px; }
 .auth-form .primary { margin-top: 10px; }
 .auth-switch { color: var(--muted); text-align: center; font-size: 13px; margin: 0; }
@@ -175,7 +175,7 @@ input:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 2px 
 .segments { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #bfc2bb; }
 .segments.three { grid-template-columns: repeat(3, 1fr); }
 .segments.four { grid-template-columns: repeat(4, 1fr); }
-.segments button { border: 0; background: transparent; padding: 11px; color: var(--muted); cursor: pointer; font-weight: 700; }
+.segments button { min-width: 0; border: 0; background: transparent; padding: 11px 7px; color: var(--muted); cursor: pointer; font-weight: 700; overflow-wrap: anywhere; }
 .segments button.active { background: var(--green); color: white; }
 .register-page { grid-template-columns: 1fr 1fr; }
 .register-form { max-width: 680px; padding: 8%; gap: 16px; }
