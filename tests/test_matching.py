@@ -9,6 +9,22 @@ def test_job_resume_collection_is_deterministic() -> None:
     assert ai.job_resume_collection(42) == "job_42_applicant_resumes"
 
 
+def test_job_collection_scale_config_uses_disk_and_int8(monkeypatch) -> None:
+    updates = []
+
+    class FakeClient:
+        def collection_exists(self, name):
+            return True
+
+        def update_collection(self, name, **kwargs):
+            updates.append((name, kwargs))
+
+    ai.configure_job_collection_for_scale(FakeClient())
+    assert updates[0][0] == ai.settings.qdrant_job_collection
+    assert updates[0][1]["vectors_config"][""].on_disk is True
+    assert updates[0][1]["quantization_config"].scalar.type.value == "int8"
+
+
 def test_match_progress_payload_is_bounded_and_identifiable(monkeypatch) -> None:
     stored = []
     monkeypatch.setattr(matching, "cache_set", lambda key, value, ttl: stored.append((key, value, ttl)))

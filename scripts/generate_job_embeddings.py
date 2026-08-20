@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 from backend.app.core.config import settings
 from backend.app.database.connection import SessionLocal
 from backend.app.models import JobPosting
-from backend.app.services.ai import _text_hash, _upsert_points, embed_texts, ensure_collections, prepare_job_text, qdrant_client
+from backend.app.services.ai import _text_hash, _upsert_points, configure_job_collection_for_scale, embed_texts, ensure_collections, prepare_job_text, qdrant_client
 
 
 def main() -> None:
@@ -30,6 +30,7 @@ def main() -> None:
 
     ensure_collections()
     vectors = qdrant_client()
+    configure_job_collection_for_scale(vectors)
     processed = 0
     with SessionLocal() as db:
         while True:

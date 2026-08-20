@@ -45,9 +45,23 @@ def ensure_collection(name: str, client: QdrantClient | None = None) -> None:
     client = client or qdrant_client()
     if client.collection_exists(name):
         return
-    vector_config = models.VectorParams(size=settings.embedding_dimension, distance=models.Distance.COSINE)
+    quantization = models.ScalarQuantization(scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, quantile=0.99, always_ram=False)) if name == settings.qdrant_job_collection else None
+    vector_config = models.VectorParams(size=settings.embedding_dimension, distance=models.Distance.COSINE, on_disk=name == settings.qdrant_job_collection, quantization_config=quantization)
     client.create_collection(name, vectors_config=vector_config)
     logger.info("collection_created", extra={"collection": name, "dimension": settings.embedding_dimension})
+
+
+def configure_job_collection_for_scale(client: QdrantClient | None = None) -> None:
+    client = client or qdrant_client()
+    ensure_collection(settings.qdrant_job_collection, client)
+    quantization = models.ScalarQuantization(scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, quantile=0.99, always_ram=False))
+    client.update_collection(
+        settings.qdrant_job_collection,
+        vectors_config={"": models.VectorParamsDiff(on_disk=True)},
+        quantization_config=quantization,
+        timeout=120,
+    )
+    logger.info("job_collection_scaled", extra={"collection": settings.qdrant_job_collection, "on_disk": True, "quantization": "int8"})
 
 
 def job_resume_collection(job_id: int) -> str:

@@ -23,8 +23,8 @@ def run_with_retries(name: str, arguments: list[str], attempts: int = 10) -> Non
 
 
 def main() -> None:
-    run_with_retries("postgresql_jobs", ["scripts/import_jobs.py"])
-    run_with_retries("qdrant_job_vectors", ["scripts/generate_job_embeddings.py", "--batch-size", "100"])
+    run_with_retries("postgresql_jobs", ["scripts/import_jobs.py"], attempts=100)
+    run_with_retries("qdrant_job_vectors", ["scripts/generate_job_embeddings.py", "--batch-size", "100"], attempts=1_000)
     print(json.dumps({"status": "complete"}), flush=True)
 
 
